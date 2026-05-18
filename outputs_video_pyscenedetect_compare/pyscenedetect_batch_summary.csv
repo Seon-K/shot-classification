@@ -1,2 +1,0 @@
-﻿video_id,video_name,detector,threshold,duration_sec,scene_count,avg_scene_duration_sec,min_scene_duration_sec,max_scene_duration_sec,text_scene_count,shot_label_counts,overlay_path
-0099,0099_DS53BHjkh5o.mp4,PySceneDetect ContentDetector,27.0,14.766666666666667,1,14.766666666666667,14.766666666666667,14.766666666666667,0,"{""medium"": 1}",C:\Temp\deep\outputs_video_pyscenedetect_compare\0099_DS53BHjkh5o\0099_DS53BHjkh5o_pyscenedetect_overlay.mp4
