@@ -331,4 +331,3 @@ multi-task classification head
 - ResNet vs CLIP 비교 표
 - confusion matrix
 - close-up/medium 개선 전후 비교
-
