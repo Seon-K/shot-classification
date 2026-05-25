@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+Input 링크 .xlsx
+
+# Documentation
+docs/
+
+# Videos and datasets
+videos/
+labeled_dataset/
+labeled_datatset/
+artifacts/dataset/
+
+# Generated artifacts
+artifacts/

@@ -1,0 +1,7 @@
+torch
+torchvision
+pillow
+open-clip-torch
+openpyxl
+opencv-python-headless
+scenedetect
