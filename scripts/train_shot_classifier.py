@@ -17,6 +17,7 @@ from shortform.classifier import (  # noqa: E402
     build_embedding_loader,
     collect_prediction_rows,
     compute_class_weights,
+    create_experiment_summary,
     evaluate_classifier,
     load_embedding_dataset,
     save_error_samples,
@@ -41,9 +42,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dropout", type=float, default=0.2, help="Dropout probability in classifier head.")
     parser.add_argument("--weight-decay", type=float, default=1e-4, help="AdamW weight decay.")
     parser.add_argument("--scheduler", action="store_true", help="Use ReduceLROnPlateau on validation macro F1.")
+    parser.add_argument("--embedding-dim", type=int, default=512, help="Input embedding dimension from CLIP backbone.")
     parser.add_argument("--hidden-dim", type=int, default=128, help="Hidden dimension of classifier head.")
     parser.add_argument("--norm", choices=["none", "batch", "layer"], default="none", help="Optional normalization after first linear layer.")
     parser.add_argument("--error-sample-count", type=int, default=20, help="Number of high/low confidence errors to export.")
+    parser.add_argument("--model-name", default="ViT-B-32", help="CLIP model name used to create embeddings; stored for reproducibility.")
+    parser.add_argument("--pretrained", default="openai", help="CLIP pretrained tag used to create embeddings; stored for reproducibility.")
     return parser.parse_args()
 
 
@@ -87,6 +91,7 @@ def main() -> None:
         num_classes=num_classes,
         epochs=args.epochs,
         lr=args.lr,
+        embedding_dim=args.embedding_dim,
         hidden_dim=args.hidden_dim,
         dropout=args.dropout,
         norm=args.norm,
@@ -106,6 +111,7 @@ def main() -> None:
     )
 
     best_model = ShotClassifier(
+        embedding_dim=args.embedding_dim,
         num_classes=num_classes,
         hidden_dim=args.hidden_dim,
         dropout=args.dropout,
@@ -141,8 +147,11 @@ def main() -> None:
         "dropout": args.dropout,
         "weight_decay": args.weight_decay,
         "scheduler": args.scheduler,
+        "embedding_dim": args.embedding_dim,
         "hidden_dim": args.hidden_dim,
         "norm": args.norm,
+        "model_name": args.model_name,
+        "pretrained": args.pretrained,
     }
     save_training_outputs(
         output_dir=args.output_dir,
@@ -153,6 +162,13 @@ def main() -> None:
         class_to_idx=class_to_idx,
         checkpoint_prefix="shot_classifier",
         training_config=training_config,
+    )
+    metrics = json.loads((Path(args.output_dir) / "metrics.json").read_text(encoding="utf-8"))
+    create_experiment_summary(
+        output_dir=args.output_dir,
+        manifest_path=args.manifest,
+        metrics=metrics,
+        error_sample_dir=Path(args.output_dir) / "error_samples",
     )
 
     last = history[-1]

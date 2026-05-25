@@ -7,6 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import torch
+from PIL import Image, ImageDraw, ImageFont
 import torch.nn.functional as F
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
@@ -393,6 +394,8 @@ def save_error_samples(
 
     write_rows(output_dir / "high_confidence_errors.csv", high_errors)
     write_rows(output_dir / "low_confidence_errors.csv", low_errors)
+    create_error_grid(high_errors, output_dir / "high_confidence_errors_grid.jpg")
+    create_error_grid(low_errors, output_dir / "low_confidence_errors_grid.jpg")
 
     if not copy_images:
         return
@@ -401,7 +404,7 @@ def save_error_samples(
         image_dir.mkdir(parents=True, exist_ok=True)
         for row in rows:
             src = Path(row["path"])
-            if not src.exists():
+            if not src.is_file():
                 continue
             filename = (
                 f"true_{row['true_label']}_pred_{row['pred_label']}_"
@@ -409,6 +412,143 @@ def save_error_samples(
             ).replace("/", "_")
             shutil.copy2(src, image_dir / filename)
 
+
+
+def _load_font(size: int) -> ImageFont.ImageFont:
+    for candidate in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    ]:
+        path = Path(candidate)
+        if path.exists():
+            return ImageFont.truetype(str(path), size=size)
+    return ImageFont.load_default()
+
+
+def create_error_grid(
+    rows: list[dict],
+    output_path: str | Path,
+    max_items: int = 12,
+    columns: int = 4,
+    cell_size: int = 224,
+    label_height: int = 58,
+) -> None:
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    selected = rows[:max_items]
+    if not selected:
+        image = Image.new("RGB", (cell_size, label_height), "white")
+        draw = ImageDraw.Draw(image)
+        draw.text((10, 10), "No error samples", fill=(0, 0, 0), font=_load_font(18))
+        image.save(output_path)
+        return
+
+    columns = max(1, columns)
+    rows_count = (len(selected) + columns - 1) // columns
+    grid = Image.new("RGB", (columns * cell_size, rows_count * (cell_size + label_height)), "white")
+    font = _load_font(16)
+
+    for idx, row in enumerate(selected):
+        col = idx % columns
+        row_idx = idx // columns
+        x = col * cell_size
+        y = row_idx * (cell_size + label_height)
+        src = Path(row.get("path", ""))
+        if src.is_file():
+            thumb = Image.open(src).convert("RGB")
+            thumb.thumbnail((cell_size, cell_size))
+            canvas = Image.new("RGB", (cell_size, cell_size), (245, 245, 245))
+            offset = ((cell_size - thumb.width) // 2, (cell_size - thumb.height) // 2)
+            canvas.paste(thumb, offset)
+        else:
+            canvas = Image.new("RGB", (cell_size, cell_size), (230, 230, 230))
+        grid.paste(canvas, (x, y))
+        draw = ImageDraw.Draw(grid)
+        label_y = y + cell_size + 4
+        draw.text((x + 6, label_y), f"GT: {row['true_label']}", fill=(0, 0, 0), font=font)
+        draw.text((x + 6, label_y + 18), f"Pred: {row['pred_label']}", fill=(180, 0, 0), font=font)
+        draw.text((x + 6, label_y + 36), f"Conf: {float(row['confidence']):.3f}", fill=(0, 0, 0), font=font)
+
+    grid.save(output_path)
+
+
+def save_training_config(output_dir: str | Path, training_config: dict | None) -> None:
+    if training_config is None:
+        return
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "training_config.json").write_text(
+        json.dumps(training_config, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def create_experiment_summary(
+    output_dir: str | Path,
+    manifest_path: str | Path,
+    metrics: dict,
+    error_sample_dir: str | Path,
+) -> None:
+    output_dir = Path(output_dir)
+    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    split_counts = manifest.get("split_counts", {})
+    folder_counts = manifest.get("folder_counts", {})
+    best_metrics = metrics.get("test_metrics_best", {})
+    best_epoch = metrics.get("best_epoch", 0)
+    pairs = metrics.get("misclassification_analysis", [])[:5]
+    error_sample_dir = Path(error_sample_dir)
+    high_csv = error_sample_dir / "high_confidence_errors.csv"
+
+    lines = [
+        "# Experiment Summary",
+        "",
+        "## Dataset",
+        f"- train: {split_counts.get('train', 0)}",
+        f"- val: {split_counts.get('val', 0)}",
+        f"- test: {split_counts.get('test', 0)}",
+        "",
+        "## Class Distribution",
+    ]
+    for label, count in sorted(folder_counts.items()):
+        lines.append(f"- {label}: {count}")
+
+    lines.extend(
+        [
+            "",
+            "## Best Checkpoint",
+            f"- best_epoch: {best_epoch}",
+            f"- test_accuracy: {best_metrics.get('accuracy', 0.0):.4f}",
+            f"- test_macro_f1: {best_metrics.get('macro_f1', 0.0):.4f}",
+            f"- test_balanced_accuracy: {best_metrics.get('balanced_accuracy', 0.0):.4f}",
+            f"- test_top2_accuracy: {best_metrics.get('top2_accuracy', 0.0):.4f}",
+            "- zero-shot improvement: TODO 입력 (예: +35.19%p)",
+            "",
+            "## Top Misclassification Pairs",
+        ]
+    )
+    if pairs:
+        for row in pairs:
+            lines.append(
+                f"- {row['true_label']} -> {row['pred_label']}: "
+                f"{row['count']} ({row['ratio_within_true']:.2%})"
+            )
+    else:
+        lines.append("- 없음")
+
+    lines.extend(
+        [
+            "",
+            "## High Confidence Error Samples",
+            f"- csv: {high_csv}",
+            f"- grid: {error_sample_dir / 'high_confidence_errors_grid.jpg'}",
+            "",
+            "## Remaining Limits",
+            "- shot_type은 scale과 subject가 섞인 단일 softmax 라벨입니다.",
+            "- 보조 라벨은 folder name에서 추론한 weak label입니다.",
+            "- scene detection threshold는 데이터셋/영상 스타일별로 튜닝이 필요합니다.",
+        ]
+    )
+    (output_dir / "experiment_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 def train_classifier(
     train_loader: DataLoader,
@@ -589,6 +729,8 @@ def save_training_outputs(
         if report:
             write_classification_report_csv(output_dir / "classification_report.csv", report)
         write_misclassification_analysis_csv(output_dir / "misclassification_analysis.csv", misclassification)
+
+    save_training_config(output_dir, training_config)
 
     summary = {
         "class_to_idx": class_to_idx,

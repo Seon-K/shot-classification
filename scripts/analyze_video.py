@@ -37,10 +37,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--samples-per-scene", type=int, default=3)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--font", default=DEFAULT_FONT)
-    parser.add_argument("--hidden-dim", type=int, default=128, help="Classifier head hidden dimension used at training time.")
-    parser.add_argument("--dropout", type=float, default=0.2, help="Classifier head dropout used at training time.")
-    parser.add_argument("--norm", choices=["none", "batch", "layer"], default="none", help="Classifier head normalization used at training time.")
+    parser.add_argument("--embedding-dim", type=int, default=None, help="Input embedding dimension. Defaults to training_config.json when available.")
+    parser.add_argument("--hidden-dim", type=int, default=None, help="Classifier head hidden dimension. Defaults to training_config.json when available.")
+    parser.add_argument("--dropout", type=float, default=None, help="Classifier head dropout. Defaults to training_config.json when available.")
+    parser.add_argument("--norm", choices=["none", "batch", "layer"], default=None, help="Classifier head normalization. Defaults to training_config.json when available.")
     return parser.parse_args()
+
+
+
+
+def load_training_config(checkpoint_path: str | Path) -> dict:
+    config_path = Path(checkpoint_path).resolve().parent / "training_config.json"
+    if not config_path.exists():
+        return {}
+    return json.loads(config_path.read_text(encoding="utf-8"))
+
+
+def resolve_model_config(args: argparse.Namespace, checkpoint_path: str | Path) -> dict:
+    config = load_training_config(checkpoint_path)
+    return {
+        "embedding_dim": args.embedding_dim if args.embedding_dim is not None else int(config.get("embedding_dim", 512)),
+        "hidden_dim": args.hidden_dim if args.hidden_dim is not None else int(config.get("hidden_dim", 128)),
+        "dropout": args.dropout if args.dropout is not None else float(config.get("dropout", 0.2)),
+        "norm": args.norm if args.norm is not None else str(config.get("norm", "none")),
+    }
 
 
 def load_class_labels(manifest_path: str | Path) -> list[str]:
@@ -307,18 +327,16 @@ def main() -> None:
     device = get_device(args.device)
 
     clip_model, preprocess = load_open_clip_model(device=device)
+    shot_model_config = resolve_model_config(args, args.checkpoint)
+    text_model_config = resolve_model_config(args, args.text_checkpoint)
     classifier = ShotClassifier(
         num_classes=len(labels),
-        hidden_dim=args.hidden_dim,
-        dropout=args.dropout,
-        norm=args.norm,
+        **shot_model_config,
     ).to(device)
     classifier.load_state_dict(torch.load(args.checkpoint, map_location=device))
     classifier.eval()
     text_classifier = TextPresenceClassifier(
-        hidden_dim=args.hidden_dim,
-        dropout=args.dropout,
-        norm=args.norm,
+        **text_model_config,
     ).to(device)
     text_classifier.load_state_dict(torch.load(args.text_checkpoint, map_location=device))
     text_classifier.eval()

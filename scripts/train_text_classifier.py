@@ -37,8 +37,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dropout", type=float, default=0.2, help="Dropout probability in classifier head.")
     parser.add_argument("--weight-decay", type=float, default=1e-4, help="AdamW weight decay.")
     parser.add_argument("--scheduler", action="store_true", help="Use ReduceLROnPlateau on validation macro F1.")
+    parser.add_argument("--embedding-dim", type=int, default=512, help="Input embedding dimension from CLIP backbone.")
     parser.add_argument("--hidden-dim", type=int, default=128, help="Hidden dimension of classifier head.")
     parser.add_argument("--norm", choices=["none", "batch", "layer"], default="none", help="Optional normalization after first linear layer.")
+    parser.add_argument("--model-name", default="ViT-B-32", help="CLIP model name used to create embeddings; stored for reproducibility.")
+    parser.add_argument("--pretrained", default="openai", help="CLIP pretrained tag used to create embeddings; stored for reproducibility.")
     return parser.parse_args()
 
 
@@ -76,7 +79,7 @@ def main() -> None:
     )
 
     device = torch.device(args.device)
-    model = TextPresenceClassifier(hidden_dim=args.hidden_dim, dropout=args.dropout, norm=args.norm)
+    model = TextPresenceClassifier(embedding_dim=args.embedding_dim, hidden_dim=args.hidden_dim, dropout=args.dropout, norm=args.norm)
     model, history = train_model(
         model=model,
         train_loader=train_loader,
@@ -98,7 +101,7 @@ def main() -> None:
         num_classes=2,
         class_names=class_names,
     )
-    best_model = TextPresenceClassifier(hidden_dim=args.hidden_dim, dropout=args.dropout, norm=args.norm).to(device)
+    best_model = TextPresenceClassifier(embedding_dim=args.embedding_dim, hidden_dim=args.hidden_dim, dropout=args.dropout, norm=args.norm).to(device)
     best_model.load_state_dict(model._best_state_dict)
     test_metrics_best = evaluate_classifier(
         best_model,
@@ -116,8 +119,11 @@ def main() -> None:
         "dropout": args.dropout,
         "weight_decay": args.weight_decay,
         "scheduler": args.scheduler,
+        "embedding_dim": args.embedding_dim,
         "hidden_dim": args.hidden_dim,
         "norm": args.norm,
+        "model_name": args.model_name,
+        "pretrained": args.pretrained,
     }
     save_training_outputs(
         output_dir=args.output_dir,
