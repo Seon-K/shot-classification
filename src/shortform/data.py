@@ -27,6 +27,8 @@ class ImageRecord:
     video_id: str
     cut_id: str
     shot_type: str
+    shot_scale: str
+    shot_subject: str
     label: int
     has_text: bool
 
@@ -68,6 +70,24 @@ def parse_label_folder(folder_name: str) -> tuple[str | None, bool | None]:
     return folder_name, None
 
 
+def infer_shot_attributes(shot_type: str | None, has_text: bool | None) -> tuple[str, str]:
+    shot_scale = "unknown"
+    shot_subject = "unknown"
+
+    if shot_type in {"close-up", "medium", "wide"}:
+        shot_scale = shot_type
+        shot_subject = "person"
+    elif shot_type == "object":
+        shot_subject = "object"
+    elif shot_type == "space":
+        shot_subject = "space"
+
+    if has_text is True and shot_subject == "unknown":
+        shot_subject = "text"
+
+    return shot_scale, shot_subject
+
+
 def parse_cut_name(path: Path) -> tuple[str, str]:
     stem = path.stem
     if "_cut_" not in stem:
@@ -104,6 +124,7 @@ def scan_labeled_dataset(
         if shot_type not in class_to_idx:
             continue
 
+        shot_scale, shot_subject = infer_shot_attributes(shot_type, has_text)
         for image_path in image_paths:
             video_id, cut_id = parse_cut_name(image_path)
             records.append(
@@ -113,6 +134,8 @@ def scan_labeled_dataset(
                     video_id=video_id,
                     cut_id=cut_id,
                     shot_type=shot_type,
+                    shot_scale=shot_scale,
+                    shot_subject=shot_subject,
                     label=class_to_idx[shot_type],
                     has_text=bool(has_text),
                 )
@@ -186,6 +209,8 @@ class ShotImageDataset(Dataset):
             "video_id": record.video_id,
             "cut_id": record.cut_id,
             "shot_type": record.shot_type,
+            "shot_scale": record.shot_scale,
+            "shot_subject": record.shot_subject,
             "has_text": record.has_text,
         }
         return image, label, metadata

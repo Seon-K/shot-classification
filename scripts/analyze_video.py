@@ -37,6 +37,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--samples-per-scene", type=int, default=3)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--font", default=DEFAULT_FONT)
+    parser.add_argument("--hidden-dim", type=int, default=128, help="Classifier head hidden dimension used at training time.")
+    parser.add_argument("--dropout", type=float, default=0.2, help="Classifier head dropout used at training time.")
+    parser.add_argument("--norm", choices=["none", "batch", "layer"], default="none", help="Classifier head normalization used at training time.")
     return parser.parse_args()
 
 
@@ -110,9 +113,16 @@ def predict_scenes(
         text_logits = text_classifier(shot_embedding.float())
         text_probabilities = torch.softmax(text_logits, dim=1)[0]
         text_confidence, text_pred_idx = text_probabilities.max(dim=0)
+        text_confidence_value = float(text_confidence.item())
         has_text = bool(int(text_pred_idx.item()))
         text_label = "text" if has_text else "notext"
-        guide_text = guide_for_label(label, confidence_value)
+        guide_text = guide_for_label(
+            label,
+            confidence_value,
+            duration_sec=record.duration_sec,
+            has_text=has_text,
+            text_confidence=text_confidence_value,
+        )
 
         rows.append(
             {
@@ -125,7 +135,8 @@ def predict_scenes(
                 "shot_type": label,
                 "confidence": f"{confidence_value:.6f}",
                 "text_label": text_label,
-                "text_confidence": f"{float(text_confidence.item()):.6f}",
+                "has_text": has_text,
+                "text_confidence": f"{text_confidence_value:.6f}",
                 "guide_text": guide_text,
             }
         )
@@ -147,6 +158,7 @@ def write_shot_log(path: str | Path, rows: list[dict]) -> None:
         "shot_type",
         "confidence",
         "text_label",
+        "has_text",
         "text_confidence",
         "guide_text",
     ]
@@ -160,7 +172,7 @@ def load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(path, size=size)
 
 
-def draw_overlay(frame, row: dict, font_path: str):
+def draw_overlay(frame, row: dict, font_path: str, total_cuts: int = 0):
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     image = Image.fromarray(rgb).convert("RGBA")
     overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
@@ -171,11 +183,19 @@ def draw_overlay(frame, row: dict, font_path: str):
     body_font = load_font(font_path, max(18, width // 34))
 
     text_value = "YES" if row["text_label"] == "text" else "NO"
-    title = f"CUT {row['cut_id']}"
-    shot_line = f"SHOT: {row['shot_type']}  {float(row['confidence']):.2f}"
+    confidence_value = float(row["confidence"])
+    cut_number = int(row.get("scene_id", row.get("cut_id", 0)))
+    title = f"CUT {cut_number}/{total_cuts or '?'}"
+    shot_line = f"SHOT: {row['shot_type']}  {confidence_value:.2f}"
+    warning_line = "LOW CONFIDENCE" if confidence_value < 0.45 else ""
     text_line = f"TEXT: {text_value}  {float(row['text_confidence']):.2f}"
-    body_lines = wrap_text(row["guide_text"], width=22)
-    lines = [title, shot_line, text_line] + body_lines
+    duration_line = f"DURATION: {float(row['duration_sec']):.2f}s"
+    guide_title = "GUIDE:"
+    body_lines = wrap_text(row["guide_text"], width=24)[:3]
+    lines = [title, shot_line]
+    if warning_line:
+        lines.append(warning_line)
+    lines += [text_line, duration_line, guide_title] + body_lines
 
     line_heights = []
     max_line_width = 0
@@ -202,12 +222,29 @@ def draw_overlay(frame, row: dict, font_path: str):
         font = title_font if idx == 0 else body_font
         if idx == 0:
             fill = (255, 255, 255, 255)
-        elif idx == 2:
+        elif idx in {2, 3}:
             fill = (135, 220, 255, 255)
         else:
             fill = (235, 235, 235, 255)
         draw.text((x + padding, text_y), line, font=font, fill=fill)
         text_y += line_heights[idx] + 10
+
+    progress_total = max(total_cuts, 1)
+    progress_ratio = min(max(cut_number / progress_total, 0.0), 1.0)
+    bar_x = x
+    bar_y = min(height - 18, y + box_height + 8)
+    bar_width = box_width
+    bar_height = 6
+    draw.rounded_rectangle(
+        (bar_x, bar_y, bar_x + bar_width, bar_y + bar_height),
+        radius=3,
+        fill=(255, 255, 255, 80),
+    )
+    draw.rounded_rectangle(
+        (bar_x, bar_y, bar_x + int(bar_width * progress_ratio), bar_y + bar_height),
+        radius=3,
+        fill=(135, 220, 255, 230),
+    )
 
     composed = Image.alpha_composite(image, overlay).convert("RGB")
     return cv2.cvtColor(np.asarray(composed), cv2.COLOR_RGB2BGR)
@@ -255,7 +292,7 @@ def create_overlay_video(
             active_row = sorted_rows[scene_index]
 
         if active_row is not None:
-            frame = draw_overlay(frame, active_row, font_path=font_path)
+            frame = draw_overlay(frame, active_row, font_path=font_path, total_cuts=len(sorted_rows))
         writer.write(frame)
 
     capture.release()
@@ -270,10 +307,19 @@ def main() -> None:
     device = get_device(args.device)
 
     clip_model, preprocess = load_open_clip_model(device=device)
-    classifier = ShotClassifier(num_classes=len(labels)).to(device)
+    classifier = ShotClassifier(
+        num_classes=len(labels),
+        hidden_dim=args.hidden_dim,
+        dropout=args.dropout,
+        norm=args.norm,
+    ).to(device)
     classifier.load_state_dict(torch.load(args.checkpoint, map_location=device))
     classifier.eval()
-    text_classifier = TextPresenceClassifier().to(device)
+    text_classifier = TextPresenceClassifier(
+        hidden_dim=args.hidden_dim,
+        dropout=args.dropout,
+        norm=args.norm,
+    ).to(device)
     text_classifier.load_state_dict(torch.load(args.text_checkpoint, map_location=device))
     text_classifier.eval()
 

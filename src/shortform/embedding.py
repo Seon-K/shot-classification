@@ -118,9 +118,12 @@ def build_shot_embeddings(
         shot_embeddings.append(pooled)
         shot_records.append(
             {
+                "path": first_record.get("path", ""),
                 "video_id": video_id,
                 "cut_id": cut_id,
                 "shot_type": first_record["shot_type"],
+                "shot_scale": first_record.get("shot_scale", "unknown"),
+                "shot_subject": first_record.get("shot_subject", "unknown"),
                 "label": int(first_record["label"]),
                 "has_text": first_record["has_text"],
                 "frame_count": len(indices),

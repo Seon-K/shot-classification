@@ -168,9 +168,16 @@ def summarize_scene_counts(
     labeled_cut_counts: dict[str, int] | None = None,
 ) -> dict:
     detected_counts = Counter(record.video_id for record in scene_records)
+    durations = [record.duration_sec for record in scene_records]
+    scene_count = sum(detected_counts.values())
+    video_count = len(detected_counts)
     summary = {
-        "video_count": len(detected_counts),
-        "scene_count": sum(detected_counts.values()),
+        "video_count": video_count,
+        "scene_count": scene_count,
+        "avg_scene_duration": sum(durations) / len(durations) if durations else 0.0,
+        "min_scene_duration": min(durations) if durations else 0.0,
+        "max_scene_duration": max(durations) if durations else 0.0,
+        "avg_scene_count_per_video": scene_count / video_count if video_count else 0.0,
         "detected_counts": dict(sorted(detected_counts.items())),
     }
 
@@ -178,16 +185,30 @@ def summarize_scene_counts(
         mismatches = []
         for video_id, labeled_count in sorted(labeled_cut_counts.items()):
             detected_count = detected_counts.get(video_id, 0)
-            if labeled_count != detected_count:
+            diff = detected_count - labeled_count
+            if diff != 0:
                 mismatches.append(
                     {
                         "video_id": video_id,
                         "labeled_cuts": labeled_count,
                         "detected_scenes": detected_count,
+                        "diff": diff,
                     }
                 )
+        abs_diffs = [abs(item["diff"]) for item in mismatches]
+        over_detected = [item for item in mismatches if item["diff"] > 0]
+        under_detected = [item for item in mismatches if item["diff"] < 0]
         summary["labeled_video_count"] = len(labeled_cut_counts)
         summary["count_mismatch_count"] = len(mismatches)
+        summary["mismatch_ratio"] = len(mismatches) / len(labeled_cut_counts) if labeled_cut_counts else 0.0
+        summary["over_detected_count"] = len(over_detected)
+        summary["under_detected_count"] = len(under_detected)
+        summary["avg_abs_count_difference"] = sum(abs_diffs) / len(abs_diffs) if abs_diffs else 0.0
+        summary["top_10_mismatch_videos"] = sorted(
+            mismatches,
+            key=lambda item: abs(item["diff"]),
+            reverse=True,
+        )[:10]
         summary["count_mismatches"] = mismatches
 
     return summary
