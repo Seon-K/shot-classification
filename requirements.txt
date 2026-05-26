@@ -1,7 +1,11 @@
 torch
 torchvision
-pillow
 open-clip-torch
-openpyxl
-opencv-python-headless
+opencv-python
 scenedetect
+pillow
+numpy
+pandas
+matplotlib
+streamlit
+openpyxl

@@ -15,6 +15,7 @@ from shortform.embedding import (  # noqa: E402
     get_device,
     load_open_clip_model,
 )
+from shortform.utils.reproducibility import configure_reproducibility  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,12 +27,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--device", default=None)
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility metadata.")
     parser.add_argument("--splits", nargs="+", default=["train", "val", "test"])
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    configure_reproducibility(seed=args.seed, project_root=PROJECT_ROOT)
     manifest_dir = Path(args.manifest_dir)
     output_dir = Path(args.output_dir)
 

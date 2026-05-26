@@ -24,6 +24,7 @@ from shortform.classifier import (  # noqa: E402
     save_training_outputs,
     train_classifier,
 )
+from shortform.utils.reproducibility import configure_reproducibility  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
     parser.add_argument("--use-class-weight", action="store_true", help="Apply inverse-frequency class weights to the loss.")
     parser.add_argument("--use-weighted-sampler", action="store_true", help="Sample minority classes more often during training.")
     parser.add_argument("--loss-type", choices=["ce", "focal"], default="ce", help="Training loss type.")
@@ -53,6 +55,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    configure_reproducibility(seed=args.seed, project_root=PROJECT_ROOT)
     manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
     class_to_idx = manifest["class_to_idx"]
     class_names = [label for label, _ in sorted(class_to_idx.items(), key=lambda item: item[1])]
@@ -152,6 +155,7 @@ def main() -> None:
         "norm": args.norm,
         "model_name": args.model_name,
         "pretrained": args.pretrained,
+        "seed": args.seed,
     }
     save_training_outputs(
         output_dir=args.output_dir,

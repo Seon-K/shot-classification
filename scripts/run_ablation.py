@@ -111,6 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed passed to training.")
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument("--model-name", default="ViT-B-32")
     parser.add_argument("--pretrained", default="openai")
@@ -162,6 +163,8 @@ def run_experiment(args: argparse.Namespace, experiment: dict) -> dict:
         str(args.lr),
         "--device",
         args.device,
+        "--seed",
+        str(args.seed),
         "--hidden-dim",
         str(args.hidden_dim),
         "--dropout",

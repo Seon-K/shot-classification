@@ -24,6 +24,7 @@ from shortform.classifier import (  # noqa: E402
     summarize_metrics_from_confusion,
     write_classification_report_csv,
 )
+from shortform.utils.reproducibility import configure_reproducibility  # noqa: E402
 
 
 SHOT_SCALE_CLASSES = ["close-up", "medium", "wide", "unknown"]
@@ -75,6 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
     return parser.parse_args()
 
 
@@ -255,6 +257,7 @@ def write_task_reports(output_dir: Path, metrics: dict) -> None:
 
 def main() -> None:
     args = parse_args()
+    configure_reproducibility(seed=args.seed, project_root=PROJECT_ROOT)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     model, history = train(args)
@@ -288,6 +291,7 @@ def main() -> None:
             "dropout": args.dropout,
             "lr": args.lr,
             "weight_decay": args.weight_decay,
+            "seed": args.seed,
         },
     }
     (output_dir / "metrics.json").write_text(

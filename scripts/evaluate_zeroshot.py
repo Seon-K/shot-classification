@@ -15,6 +15,7 @@ from shortform.zeroshot import (  # noqa: E402
     load_class_mapping,
     save_zeroshot_outputs,
 )
+from shortform.utils.reproducibility import configure_reproducibility  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-name", default="ViT-B-32")
     parser.add_argument("--pretrained", default="openai")
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility metadata.")
     parser.add_argument("--confidence-threshold", type=float, default=0.0)
     parser.add_argument("--splits", nargs="+", default=["train", "val", "test"])
     return parser.parse_args()
@@ -32,6 +34,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    configure_reproducibility(seed=args.seed, project_root=PROJECT_ROOT)
     class_to_idx = load_class_mapping(args.manifest)
     labels, text_embeddings = build_text_embeddings(
         class_to_idx=class_to_idx,

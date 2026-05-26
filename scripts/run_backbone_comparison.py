@@ -39,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed passed to embedding/training scripts.")
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
@@ -85,6 +86,8 @@ def extract_embeddings(args: argparse.Namespace, model_name: str, pretrained: st
             str(args.num_workers),
             "--device",
             args.device,
+            "--seed",
+            str(args.seed),
         ]
     )
     return time.perf_counter() - start
@@ -120,6 +123,8 @@ def train_classifier(args: argparse.Namespace, model_name: str, pretrained: str,
             str(args.lr),
             "--device",
             args.device,
+            "--seed",
+            str(args.seed),
             "--embedding-dim",
             str(dim),
             "--hidden-dim",

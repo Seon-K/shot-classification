@@ -20,6 +20,7 @@ from shortform.classifier import (  # noqa: E402
     save_training_outputs,
     train_model,
 )
+from shortform.utils.reproducibility import configure_reproducibility  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
     parser.add_argument("--use-class-weight", action="store_true", help="Apply inverse-frequency class weights to text/notext loss.")
     parser.add_argument("--use-weighted-sampler", action="store_true", help="Sample text/notext classes with inverse-frequency weights.")
     parser.add_argument("--loss-type", choices=["ce", "focal"], default="ce", help="Training loss type.")
@@ -47,6 +49,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    configure_reproducibility(seed=args.seed, project_root=PROJECT_ROOT)
     embedding_dir = Path(args.embedding_dir)
     train_embedding_path = embedding_dir / "train_shot_embeddings.pt"
     val_embedding_path = embedding_dir / "val_shot_embeddings.pt"
@@ -124,6 +127,7 @@ def main() -> None:
         "norm": args.norm,
         "model_name": args.model_name,
         "pretrained": args.pretrained,
+        "seed": args.seed,
     }
     save_training_outputs(
         output_dir=args.output_dir,

@@ -18,7 +18,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from shortform.classifier import ShotClassifier, TextPresenceClassifier  # noqa: E402
 from shortform.embedding import get_device, load_open_clip_model  # noqa: E402
-from shortform.guide import guide_for_label, summarize_guides, wrap_text  # noqa: E402
+from shortform.guide import build_temporal_summary, guide_for_label, summarize_guides, wrap_text  # noqa: E402
 from shortform.video import detect_video_scenes  # noqa: E402
 
 
@@ -41,6 +41,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-dim", type=int, default=None, help="Classifier head hidden dimension. Defaults to training_config.json when available.")
     parser.add_argument("--dropout", type=float, default=None, help="Classifier head dropout. Defaults to training_config.json when available.")
     parser.add_argument("--norm", choices=["none", "batch", "layer"], default=None, help="Classifier head normalization. Defaults to training_config.json when available.")
+    parser.add_argument("--model-name", default=None, help="CLIP model name (e.g., ViT-B-32). Defaults to training_config.json or ViT-B-32.")
+    parser.add_argument("--pretrained", default=None, help="CLIP pretrained weights (e.g., openai). Defaults to training_config.json or openai.")
+    parser.add_argument("--overlay-mode", choices=["compact", "detailed"], default="compact", help="Overlay density. compact shows core prediction; detailed adds temporal summary.")
     return parser.parse_args()
 
 
@@ -60,6 +63,14 @@ def resolve_model_config(args: argparse.Namespace, checkpoint_path: str | Path) 
         "hidden_dim": args.hidden_dim if args.hidden_dim is not None else int(config.get("hidden_dim", 128)),
         "dropout": args.dropout if args.dropout is not None else float(config.get("dropout", 0.2)),
         "norm": args.norm if args.norm is not None else str(config.get("norm", "none")),
+    }
+
+
+def resolve_clip_config(args: argparse.Namespace, checkpoint_path: str | Path) -> dict:
+    config = load_training_config(checkpoint_path)
+    return {
+        "model_name": args.model_name if args.model_name is not None else str(config.get("model_name", "ViT-B-32")),
+        "pretrained": args.pretrained if args.pretrained is not None else str(config.get("pretrained", "openai")),
     }
 
 
@@ -188,11 +199,27 @@ def write_shot_log(path: str | Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
-    return ImageFont.truetype(path, size=size)
+def load_font(path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load a TrueType font with fallback to default if file not found."""
+    try:
+        return ImageFont.truetype(path, size=size)
+    except (OSError, IOError):
+        # Fallback to DejaVuSans if specified font not found
+        try:
+            return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size=size)
+        except (OSError, IOError):
+            # Final fallback to default PIL font
+            return ImageFont.load_default()
 
 
-def draw_overlay(frame, row: dict, font_path: str, total_cuts: int = 0):
+def draw_overlay(
+    frame,
+    row: dict,
+    font_path: str,
+    total_cuts: int = 0,
+    overlay_mode: str = "compact",
+    temporal_summary: dict | None = None,
+):
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     image = Image.fromarray(rgb).convert("RGBA")
     overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
@@ -209,13 +236,23 @@ def draw_overlay(frame, row: dict, font_path: str, total_cuts: int = 0):
     shot_line = f"SHOT: {row['shot_type']}  {confidence_value:.2f}"
     warning_line = "LOW CONFIDENCE" if confidence_value < 0.45 else ""
     text_line = f"TEXT: {text_value}  {float(row['text_confidence']):.2f}"
-    duration_line = f"DURATION: {float(row['duration_sec']):.2f}s"
     guide_title = "GUIDE:"
     body_lines = wrap_text(row["guide_text"], width=24)[:3]
     lines = [title, shot_line]
     if warning_line:
         lines.append(warning_line)
-    lines += [text_line, duration_line, guide_title] + body_lines
+    lines.append(text_line)
+    if overlay_mode == "detailed":
+        summary = temporal_summary or {}
+        lines.extend(
+            [
+                f"AVG CUT: {float(summary.get('avg_duration', 0.0)):.2f}s",
+                f"FAST RATIO: {float(summary.get('fast_cut_ratio', 0.0)):.2f}",
+                f"DENSITY: {summary.get('text_density_level', 'unknown')}",
+                f"DOMINANT: {summary.get('dominant_shot_type', 'unknown')}",
+            ]
+        )
+    lines += [guide_title] + body_lines
 
     line_heights = []
     max_line_width = 0
@@ -242,7 +279,9 @@ def draw_overlay(frame, row: dict, font_path: str, total_cuts: int = 0):
         font = title_font if idx == 0 else body_font
         if idx == 0:
             fill = (255, 255, 255, 255)
-        elif idx in {2, 3}:
+        elif line == "LOW CONFIDENCE":
+            fill = (255, 210, 120, 255)
+        elif line.startswith(("TEXT:", "AVG CUT:", "FAST RATIO:", "DENSITY:", "DOMINANT:")):
             fill = (135, 220, 255, 255)
         else:
             fill = (235, 235, 235, 255)
@@ -275,6 +314,7 @@ def create_overlay_video(
     rows: list[dict],
     output_path: str | Path,
     font_path: str,
+    overlay_mode: str = "compact",
 ) -> None:
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
@@ -295,6 +335,7 @@ def create_overlay_video(
     )
 
     sorted_rows = sorted(rows, key=lambda row: float(row["start_sec"]))
+    temporal_summary = build_temporal_summary(sorted_rows)
     scene_index = 0
     active_row = sorted_rows[0] if sorted_rows else None
 
@@ -312,7 +353,14 @@ def create_overlay_video(
             active_row = sorted_rows[scene_index]
 
         if active_row is not None:
-            frame = draw_overlay(frame, active_row, font_path=font_path, total_cuts=len(sorted_rows))
+            frame = draw_overlay(
+                frame,
+                active_row,
+                font_path=font_path,
+                total_cuts=len(sorted_rows),
+                overlay_mode=overlay_mode,
+                temporal_summary=temporal_summary,
+            )
         writer.write(frame)
 
     capture.release()
@@ -326,7 +374,12 @@ def main() -> None:
     labels = load_class_labels(args.manifest)
     device = get_device(args.device)
 
-    clip_model, preprocess = load_open_clip_model(device=device)
+    clip_config = resolve_clip_config(args, args.checkpoint)
+    clip_model, preprocess = load_open_clip_model(
+        model_name=clip_config["model_name"],
+        pretrained=clip_config["pretrained"],
+        device=device,
+    )
     shot_model_config = resolve_model_config(args, args.checkpoint)
     text_model_config = resolve_model_config(args, args.text_checkpoint)
     classifier = ShotClassifier(
@@ -368,6 +421,7 @@ def main() -> None:
         rows=rows,
         output_path=overlay_path,
         font_path=args.font,
+        overlay_mode=args.overlay_mode,
     )
 
     print(f"scenes: {len(rows)}")

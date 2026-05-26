@@ -196,6 +196,8 @@ def run_training(args: argparse.Namespace, experiment_dir: Path, embedding_dir: 
         str(args.lr),
         "--device",
         args.device,
+        "--seed",
+        str(args.seed),
         "--embedding-dim",
         str(embedding_dim),
         "--hidden-dim",
