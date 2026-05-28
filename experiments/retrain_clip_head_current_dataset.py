@@ -22,7 +22,7 @@ from tqdm.auto import tqdm
 
 SEED = 42
 ROOT = Path(__file__).resolve().parents[1]
-DATASET_DIR = ROOT / "data" / "labeled_dataset"
+DATASET_DIR = ROOT / "labeled_dataset"
 BASELINE_DIR = ROOT / "outputs" / "baseline"
 OUTPUT_DIR = ROOT / "outputs" / "clip_embeddings"
 CHECKPOINT_DIR = ROOT / "checkpoints"

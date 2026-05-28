@@ -1,5 +1,5 @@
 {
-  "best_alpha_clip": 0.45,
+  "best_alpha_clip": 0.5,
   "rows": [
     {
       "experiment": "clip_stronger_retrained",
@@ -15,12 +15,14 @@
       "shot_macro_f1": 0.7960301768816542
     },
     {
-      "experiment": "ensemble_alpha_clip_0.45",
-      "shot_acc": 0.8363636363636363,
-      "shot_macro_f1": 0.8386207165706457,
+      "experiment": "ensemble_alpha_clip_0.50",
+      "shot_acc": 0.8436363636363636,
+      "shot_macro_f1": 0.8425877934428609,
       "text_acc": 0.8945454545454545,
       "text_f1": 0.9376344086021505,
-      "joint_acc": 0.730909090909091
+      "joint_acc": 0.7418181818181818,
+      "text_threshold": 0.5,
+      "val_text_macro_f1_at_threshold": 0.8116246896734701
     }
   ]
 }

@@ -1,0 +1,6 @@
+{
+  "text_threshold": 0.46,
+  "val_text_macro_f1": 0.8091947403781553,
+  "val_text_acc": 0.8767605633802817,
+  "val_joint_acc": 0.7676056338028169
+}

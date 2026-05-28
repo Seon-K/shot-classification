@@ -1,0 +1,10 @@
+{
+  "seed": 42,
+  "python": "3.13.12",
+  "platform": "Linux-6.14.0-27-generic-x86_64-with-glibc2.39",
+  "torch": "2.12.0+cu130",
+  "cuda_available": false,
+  "cuda_version": "13.0",
+  "device": "cpu",
+  "pipeline_execution_status": "ensemble comprehensive metrics generated"
+}

@@ -1,0 +1,22 @@
+{
+  "experiment": "focal_loss",
+  "shot_acc": 0.8618181818181818,
+  "shot_macro_f1": 0.8603116709123821,
+  "text_acc": 0.8945454545454545,
+  "text_macro_f1": 0.7942519542839452,
+  "joint_acc": 0.76,
+  "text_threshold": 0.43,
+  "alpha_clip": 0.46,
+  "name": "focal_loss",
+  "hidden_dims": [
+    512,
+    256
+  ],
+  "dropout": 0.25,
+  "lr": 0.001,
+  "weight_decay": 0.001,
+  "closeup_factor": 1.0,
+  "layernorm": false,
+  "loss_type": "focal",
+  "label_smoothing": 0.0
+}

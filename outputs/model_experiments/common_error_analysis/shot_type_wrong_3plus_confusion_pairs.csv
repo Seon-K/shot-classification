@@ -1,0 +1,12 @@
+﻿true_shot,pred_shot,sample_count,model_wrong_votes
+medium,wide,16,58
+medium,close-up,11,50
+close-up,object,8,49
+close-up,medium,9,43
+medium,space,5,20
+object,space,2,11
+wide,medium,2,7
+medium,object,2,5
+space,wide,1,4
+space,object,1,3
+close-up,wide,1,1

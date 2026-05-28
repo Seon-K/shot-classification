@@ -1,143 +1,120 @@
 # ShotGuide
 
-숏폼 영상을 입력하면 scene별 촬영 구도와 화면 내 text 여부를 예측하고, 결과를 overlay 촬영 가이드 영상으로 생성하는 프로젝트입니다.
+인스타그램 릴스 링크 또는 숏폼 영상을 입력하면 컷 전환을 탐지하고, 각 컷의 `shot_type`과 화면 내 `text` 여부를 예측한 뒤 overlay 촬영 가이드 영상으로 생성하는 프로젝트입니다.
+
+## Task
+
+- Cut / scene transition detection
+- Shot-type classification: `wide`, `medium`, `close-up`, `object`, `space`
+- Text presence classification: `text`, `notext`
+- Scene별 prediction과 confidence 기반 guide 생성
 
 ## 프로젝트 구조
 
 ```text
-shot-classification/
-├─ README.md
-├─ requirements.txt
-├─ .gitignore
-├─ data/
-│  ├─ labeled_dataset/
-│  ├─ videos_new_links/
-│  └─ outputs_clip_frame_extraction/
+deep/
+├─ labeled_dataset/
 ├─ checkpoints/
-│  ├─ clip_vit_b32_multitask_head.pt
-│  └─ clip_vit_b32_multitask_head_baseline256_backup.pt
 ├─ src/
-│  ├─ shotguide_batch_video_inference.py
-│  ├─ shotguide_instagram_overlay_pipeline.py
-│  └─ shotguide_final_instagram_pipeline.py
-├─ notebooks/
-│  ├─ shotguide_clip_embedding_baseline.ipynb
-│  ├─ shotguide_clip_scene_frame_extraction.ipynb
-│  ├─ shotguide_model_improvement_evaluation.ipynb
-│  └─ shotguide_final_instagram_pipeline.ipynb
 ├─ experiments/
-│  ├─ retrain_clip_head_current_dataset.py
-│  ├─ run_clip_head_experiments.py
-│  ├─ run_dinov2_shot_experiment.py
-│  ├─ run_clip_dinov2_ensemble_experiment.py
-│  ├─ save_best_clip_stronger_checkpoint.py
-│  └─ compute_comprehensive_metrics.py
 ├─ outputs/
-│  ├─ baseline/
-│  ├─ clip_embeddings/
-│  ├─ model_experiments/
-│  ├─ instagram_overlay/
-│  └─ final_instagram_pipeline/
 └─ docs/
-   ├─ model_design.md
-   ├─ file_roles.md
-   ├─ evaluation_metrics.md
-   └─ progress_summary.md
 ```
 
-## 모델 구분
+주요 문서:
 
-본 프로젝트에서는 모델을 두 기준으로 구분합니다.
+- `docs/model_design.md`: 모델 설계와 선택 논리
+- `docs/file_roles.md`: 파일별 역할
+- `docs/evaluation_metrics.md`: 평가 지표와 결과
+- `docs/progress_summary.md`: 진행 상황 요약
 
-- 성능 최고 모델: CLIP + DINOv2 ensemble
-- 최종 파이프라인 적용 모델: CLIP ViT-B/32 frozen embedding + stronger multi-task head
+## 핵심 문제 정의
 
-CLIP + DINOv2 ensemble은 shot type 분류 성능이 가장 높게 나왔습니다. 다만 DINOv2 feature 추출 시간이 길어 인스타그램 링크 입력부터 overlay 영상 생성까지 이어지는 전체 파이프라인에는 부담이 있습니다.
+이 프로젝트의 가장 큰 어려움은 shot-type 라벨의 모호성입니다. `medium`, `wide`, `close-up`, `object`는 단순 객체 분류가 아니라 피사체 크기, 배경 비중, 공간감, 중심 피사체의 종류를 함께 고려해야 합니다.
 
-따라서 실제 데모 및 최종 overlay pipeline에는 CLIP 기반 stronger multi-task head를 적용합니다. 성능 비교 결과에서는 CLIP + DINOv2 ensemble을 최고 성능 모델로 기록합니다.
+주요 공통 오분류 패턴은 다음과 같습니다.
 
-## 최종 파이프라인 적용 모델
+| 실제 라벨 | 자주 틀린 라벨 | 원인 |
+|---|---|---|
+| `medium` | `wide` | 배경과 공간 비중 경계가 애매함 |
+| `medium` | `close-up` | 피사체 크기 기준이 애매함 |
+| `close-up` | `object` | 사람/물체 중심 클로즈업 혼동 |
+| `close-up` | `medium` | 얼굴/상반신 비율 경계가 애매함 |
 
-- CLIP ViT-B/32 frozen image encoder
-- 512차원 CLIP image embedding 사용
-- stronger multi-task head 적용
-- shared layer: `512 -> 512 -> 256`
-- `shot_head`: `close-up`, `medium`, `wide`, `object`, `space`
-- `text_head`: `notext`, `text`
+따라서 단순히 큰 모델 하나를 사용하는 방식보다, 각 subtask에 필요한 visual representation을 실험적으로 비교했습니다.
 
-적용 checkpoint:
+## 모델 실험 흐름
+
+1. **CLIP ViT-B/32 baseline**: image-text pretraining 기반 semantic representation 확인
+2. **CLIP head 개선**: multi-task head, class weight, dropout, validation threshold tuning 적용
+3. **CLIP + DINOv2 ensemble**: CLIP의 semantic cue와 DINOv2의 structural visual cue 결합
+4. **Hyperparameter tuning**: alpha search, focal loss, dropout, layer norm, label smoothing 등 비교
+5. **CLIP-L/14, CLIP-H/14, SigLIP, SigLIP2**: 더 큰 또는 최신 vision-language backbone 비교
+6. **DINOv3**: DINOv2의 최신 대체 후보 검증
+7. **Task-specific branch 조합**: shot은 CLIP+DINOv2, text는 SigLIP2가 담당
+8. **C-RADIOv4**: 3-model 구조를 단일 distilled backbone으로 대체할 수 있는지 확인
+
+## 주요 결과
+
+| 모델 | 모델 수 | shot acc | shot macro F1 | text acc | text macro F1 | joint acc |
+|---|---:|---:|---:|---:|---:|---:|
+| CLIP stronger head | 1 | 0.8073 | 0.8081 | 0.8945 | 0.7982 | 0.7273 |
+| CLIP+DINOv2 focal | 2 | 0.8618 | 0.8603 | 0.8945 | 0.7943 | 0.7600 |
+| DINOv3 single | 1 | 0.8255 | 0.8038 | 0.9018 | 0.7706 | 0.7455 |
+| CLIP+DINOv3 | 2 | 0.8400 | 0.8425 | 0.8945 | 0.7943 | 0.7527 |
+| SigLIP2 single | 1 | 0.8182 | 0.8312 | 0.9455 | 0.8995 | 0.7745 |
+| DINOv3+SigLIP2 | 2 | 0.8436 | 0.8518 | 0.9455 | 0.8995 | 0.8000 |
+| C-RADIOv4-SO400M | 1 | 0.8255 | 0.8216 | 0.9745 | 0.9493 | 0.8000 |
+| **CLIP+DINOv2 shot + SigLIP2 text** | **3** | **0.8618** | **0.8603** | **0.9527** | **0.9078** | **0.8218** |
+
+## 현재 결론
+
+최고 성능은 **CLIP+DINOv2 shot branch + SigLIP2 text branch**에서 나왔습니다.
 
 ```text
-checkpoints/clip_vit_b32_multitask_head.pt
+shot: CLIP ViT-B/32 + DINOv2 ViT-S/14 focal ensemble
+text: SigLIP2 ViT-B/16-256 text head
+joint accuracy: 0.8218
 ```
 
-## 주요 성능
+이 구조는 단순히 모델을 많이 붙인 것이 아니라, task를 다음처럼 분해한 결과입니다.
 
-### 최종 파이프라인 적용 모델
+- CLIP: 장면의 semantic context
+- DINOv2: 구도, 피사체 배치, visual structure
+- SigLIP2: text/overlay presence에 강한 vision-language feature
+
+다만 모델 3개를 사용하는 구조는 추론 비용과 유지보수 비용이 큽니다. 그래서 단일 backbone 대안으로 C-RADIOv4-SO400M도 실험했습니다.
 
 ```text
-Shot Accuracy:          0.807
-Shot Macro F1:          0.808
-Shot Balanced Accuracy: 0.829
-Shot Weighted F1:       0.806
-Shot Top-2 Accuracy:    0.971
-
-Text Accuracy:          0.895
-Text Macro F1:          0.798
-Text Weighted F1:       0.899
-
-Joint Accuracy:         0.727
-Joint Macro F1:         0.651
-Joint Weighted F1:      0.729
+C-RADIOv4-SO400M single backbone
+joint accuracy: 0.8000
+text accuracy: 0.9745
 ```
 
-### 최고 성능 실험 모델
-
-```text
-CLIP + DINOv2 ensemble
-Shot Accuracy: 0.836
-Shot Macro F1: 0.839
-Joint Accuracy: 0.731
-```
+발표에서는 최고 성능 모델과 단일 backbone 대안을 함께 제시하여 성능-복잡도 trade-off를 설명하는 것이 적절합니다.
 
 ## 실행 방법
 
 최종 파이프라인 실행:
 
 ```bash
-python src/shotguide_final_instagram_pipeline.py
+python3 src/shotguide_final_instagram_pipeline.py
 ```
 
-노트북 실행:
+주요 실험 실행 예시:
 
-```text
-notebooks/shotguide_final_instagram_pipeline.ipynb
+```bash
+python3 experiments/evaluate_clip_dinov2_shot_siglip2_text_combo.py
+python3 experiments/run_cradiov4_backbone_experiment.py
+python3 experiments/evaluate_dinov3_siglip2_ensemble_experiment.py
 ```
 
-분석할 인스타그램 링크는 코드의 `INSTAGRAM_LINKS`에 추가합니다.
-
-## 결과물
-
-최종 pipeline 결과:
+## 주요 결과물
 
 ```text
+outputs/model_experiments/clip_dinov2_shot_siglip2_text_combo/
+outputs/model_experiments/cradiov4_backbones/
+outputs/model_experiments/dinov3_siglip2_ensemble/
+outputs/model_experiments/common_error_analysis/
 outputs/final_instagram_pipeline/
 ```
-
-각 영상별 생성 파일:
-
-```text
-scene_frames/
-clip_distance_profile.csv
-scene_metadata.csv
-scene_predictions.csv
-scene_clip_embeddings.npz
-*_overlay.mp4
-```
-
-## 문서
-
-- `docs/model_design.md`: 모델 설계 기준
-- `docs/file_roles.md`: 파일별 역할
-- `docs/evaluation_metrics.md`: 평가 지표 정리
-- `docs/progress_summary.md`: 진행 상황 요약

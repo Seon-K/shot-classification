@@ -1,0 +1,2 @@
+﻿embedding_extraction_time_sec,classifier_fit_time_sec,classifier_inference_time_sec,overlay_rendering_time_sec,scene_detection_time_sec,total_runtime_sec,throughput_samples_per_sec,note
+509.15746201202273,1.270100997760892,,,,510.4275630097836,3.9417934018610885,image embedding cache + classifier training only; video overlay is not run here

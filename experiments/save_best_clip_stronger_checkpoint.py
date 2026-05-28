@@ -25,6 +25,7 @@ EPOCHS = 100
 PATIENCE = 15
 HIDDEN_DIMS = [512, 256]
 DROPOUT = 0.25
+DEFAULT_TEXT_THRESHOLD = 0.5
 
 
 def seed_everything(seed: int = SEED) -> None:
@@ -56,17 +57,45 @@ def class_weights(labels: torch.Tensor, num_classes: int) -> torch.Tensor:
     return total / (num_classes * torch.clamp(counts, min=1))
 
 
-def predict(model, loader):
+def predict_outputs(model, loader):
     model.eval()
-    shot_true, shot_pred, text_true, text_pred = [], [], [], []
+    shot_true, shot_pred, text_true = [], [], []
+    text_prob_rows = []
     with torch.no_grad():
         for x, y_shot, y_text in loader:
             shot_logits, text_logits = model(x.to(DEVICE))
+            text_prob = torch.softmax(text_logits, dim=1).cpu().numpy()
             shot_true.extend(y_shot.numpy().tolist())
             text_true.extend(y_text.numpy().tolist())
             shot_pred.extend(shot_logits.argmax(1).cpu().numpy().tolist())
-            text_pred.extend(text_logits.argmax(1).cpu().numpy().tolist())
-    return np.array(shot_true), np.array(shot_pred), np.array(text_true), np.array(text_pred)
+            text_prob_rows.append(text_prob)
+    return {
+        "shot_true": np.array(shot_true),
+        "shot_pred": np.array(shot_pred),
+        "text_true": np.array(text_true),
+        "text_prob": np.vstack(text_prob_rows),
+    }
+
+
+def predict(model, loader, text_threshold=DEFAULT_TEXT_THRESHOLD):
+    out = predict_outputs(model, loader)
+    text_pred = (out["text_prob"][:, 1] >= float(text_threshold)).astype(np.int64)
+    return out["shot_true"], out["shot_pred"], out["text_true"], text_pred
+
+
+def tune_text_threshold(text_true, text_prob, thresholds=None):
+    # text/notext 불균형을 고려해 validation macro F1 기준으로 threshold를 선택합니다.
+    if thresholds is None:
+        thresholds = np.round(np.arange(0.05, 0.951, 0.01), 2)
+    best_threshold = DEFAULT_TEXT_THRESHOLD
+    best_score = -1.0
+    for threshold in thresholds:
+        pred = (text_prob[:, 1] >= float(threshold)).astype(np.int64)
+        current = f1_score(text_true, pred, average="macro", zero_division=0)
+        if current > best_score or (current == best_score and abs(threshold - DEFAULT_TEXT_THRESHOLD) < abs(best_threshold - DEFAULT_TEXT_THRESHOLD)):
+            best_threshold = float(threshold)
+            best_score = float(current)
+    return best_threshold, best_score
 
 
 def score(shot_true, shot_pred, text_true, text_pred):
@@ -120,7 +149,7 @@ def main() -> None:
             loss.backward()
             optimizer.step()
 
-        val_score = score(*predict(model, val_loader))
+        val_score = score(*predict(model, val_loader, text_threshold=DEFAULT_TEXT_THRESHOLD))
         if val_score["joint_acc"] > best_joint:
             best_joint = val_score["joint_acc"]
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
@@ -131,7 +160,11 @@ def main() -> None:
                 break
 
     model.load_state_dict(best_state)
-    test_score = score(*predict(model, test_loader))
+    val_outputs = predict_outputs(model, val_loader)
+    text_threshold, val_text_macro_f1 = tune_text_threshold(val_outputs["text_true"], val_outputs["text_prob"])
+    test_score = score(*predict(model, test_loader, text_threshold=text_threshold))
+    test_score["text_threshold"] = text_threshold
+    test_score["val_text_macro_f1_at_threshold"] = val_text_macro_f1
     checkpoint = {
         "model_state_dict": model.state_dict(),
         "shot_types": SHOT_TYPES,
@@ -144,6 +177,9 @@ def main() -> None:
         "clip_model": "ViT-B-32",
         "clip_model_name": "ViT-B-32",
         "clip_pretrained": "openai",
+        "text_threshold": text_threshold,
+        "text_threshold_metric": "validation_text_macro_f1",
+        "val_text_macro_f1_at_threshold": val_text_macro_f1,
         "seed": SEED,
         "dataset_rows": len(meta),
         "test_metrics": test_score,

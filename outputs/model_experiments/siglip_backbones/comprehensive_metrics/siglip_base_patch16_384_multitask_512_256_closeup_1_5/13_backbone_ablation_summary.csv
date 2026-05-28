@@ -1,0 +1,2 @@
+﻿backbone,model_name,embedding_dimension,embedding_time_sec,fit_time_sec,backbone_macro_f1,backbone_accuracy,head_hidden_dims,dropout,class_weight_closeup_factor
+siglip_base_patch16_384,vit_base_patch16_siglip_384,768,509.15746201202273,2.329928331077099,0.7921711622679533,0.8,"(512, 256)",0.25,1.5

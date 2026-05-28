@@ -8,80 +8,120 @@
   - shot type/text 여부 예측
   - guide text 생성
   - overlay video 생성
+  - validation 기반 `text_threshold` 적용
 
 - `src/shotguide_instagram_overlay_pipeline.py`
   - 인스타그램 영상 다운로드
   - CLIP distance 기반 scene detection
-  - 기존 overlay pipeline 실행
+  - scene frame encoding
+  - overlay pipeline 실행
+  - cut detection 평가 함수 포함
 
 - `src/shotguide_final_instagram_pipeline.py`
-  - 최종 제출용 통합 pipeline
-  - 인스타그램 링크 입력부터 overlay mp4 생성까지 실행
-  - 최종 파이프라인 적용 모델인 CLIP stronger head 사용
+  - 인스타그램 링크 입력부터 overlay mp4 생성까지 이어지는 통합 pipeline
 
-## notebooks
-
-- `notebooks/shotguide_clip_embedding_baseline.ipynb`
-  - CLIP embedding 기반 head 학습 노트북
-  - `clip_vit_b32_multitask_head.pt` 생성 흐름 확인
-
-- `notebooks/shotguide_clip_scene_frame_extraction.ipynb`
-  - 추가 라벨링용 frame 추출 노트북
-  - 영상 번호와 이미지 번호 기준으로 저장
-
-- `notebooks/shotguide_model_improvement_evaluation.ipynb`
-  - 모델 평가 및 개선 실험 결과 정리
-  - CLIP stronger head, DINOv2, ensemble 성능 비교
-
-- `notebooks/shotguide_final_instagram_pipeline.ipynb`
-  - 최종 pipeline 실행용 노트북
-  - 코드 실행 흐름을 notebook 형태로 확인
-
-## experiments
+## experiments: 기존 주요 실험
 
 - `experiments/retrain_clip_head_current_dataset.py`
-  - 현재 labeled dataset 기준 CLIP head 재학습
+  - 현재 dataset 기준 CLIP head 재학습
+  - dataset path는 `deep/labeled_dataset` 기준
 
 - `experiments/run_clip_head_experiments.py`
   - CLIP head 구조 실험
-  - dropout, hidden layer, loss 등 비교
 
 - `experiments/run_dinov2_shot_experiment.py`
   - DINOv2 shot-only 실험
-  - shot type 분류 성능 비교
 
 - `experiments/run_clip_dinov2_ensemble_experiment.py`
   - CLIP + DINOv2 ensemble 실험
-  - 성능 최고 모델 산출
 
 - `experiments/save_best_clip_stronger_checkpoint.py`
-  - 최종 파이프라인 적용용 CLIP stronger head checkpoint 저장
+  - CLIP stronger head checkpoint 저장
 
 - `experiments/compute_comprehensive_metrics.py`
   - 종합 평가 지표 계산
-  - accuracy, F1, joint reliability, calibration, multi-seed stability 등 산출
 
-## checkpoints
+## experiments: 새로 추가한 확장 실험
 
-- `checkpoints/clip_vit_b32_multitask_head.pt`
-  - 최종 overlay pipeline에서 사용하는 CLIP stronger head checkpoint
+- `experiments/run_clip_large_backbone_experiments.py`
+  - CLIP ViT-L/14, ViT-H/14 실험
 
-- `checkpoints/clip_vit_b32_multitask_head_baseline256_backup.pt`
-  - 이전 baseline head backup checkpoint
+- `experiments/run_siglip_backbone_experiments.py`
+  - SigLIP backbone 실험
+
+- `experiments/run_siglip2_backbone_experiments.py`
+  - SigLIP2 ViT-B/16-256 단일 backbone 실험
+
+- `experiments/run_dinov3_backbone_experiments.py`
+  - DINOv3 ViT-S/16 단일 backbone 실험
+
+- `experiments/run_cradiov4_backbone_experiment.py`
+  - C-RADIOv4-SO400M 단일 backbone 실험
+
+- `experiments/tune_clip_dinov2_ensemble_hyperparams.py`
+  - CLIP+DINOv2 ensemble hyperparameter tuning
+
+- `experiments/evaluate_focal_loss_per_class.py`
+  - focal loss 기반 CLIP+DINOv2 ensemble의 shot-type별 성능 분석
+
+- `experiments/evaluate_clip_dinov2_ensemble_comprehensive.py`
+  - CLIP+DINOv2 ensemble comprehensive metric 산출
+
+- `experiments/evaluate_clip_dinov2_shot_siglip2_text_combo.py`
+  - 현재 최고 성능 실험
+  - shot은 CLIP+DINOv2 ensemble, text는 SigLIP2 text head 사용
+
+- `experiments/evaluate_clip_dinov3_ensemble_experiment.py`
+  - CLIP+DINOv3 ensemble 실험
+
+- `experiments/evaluate_dinov3_siglip2_ensemble_experiment.py`
+  - DINOv3+SigLIP2 ensemble 실험
 
 ## outputs
 
-- `outputs/baseline/`
-  - dataset index, split 정보, ResNet baseline 결과
-
 - `outputs/clip_embeddings/`
-  - CLIP embedding, prediction, metric 결과
+  - CLIP ViT-B/32 embedding과 metadata
 
-- `outputs/model_experiments/`
-  - DINOv2, ensemble, comprehensive metrics 결과
+- `outputs/model_experiments/clip_head/`
+  - CLIP head 구조 실험 결과
+
+- `outputs/model_experiments/dinov2_shot/`
+  - DINOv2 shot-only embedding과 결과
+
+- `outputs/model_experiments/ensemble_hyperparam_tuning/`
+  - CLIP+DINOv2 hyperparameter tuning 결과
+
+- `outputs/model_experiments/clip_large_backbones/`
+  - CLIP ViT-L/14, ViT-H/14 실험 결과
+
+- `outputs/model_experiments/siglip_backbones/`
+  - SigLIP backbone 실험 결과
+
+- `outputs/model_experiments/siglip2_backbones/`
+  - SigLIP2 단일 backbone 실험 결과
+
+- `outputs/model_experiments/dinov3_backbones/`
+  - DINOv3 단일 backbone 실험 결과
+
+- `outputs/model_experiments/cradiov4_backbones/`
+  - C-RADIOv4-SO400M 단일 backbone 실험 결과
+
+- `outputs/model_experiments/clip_dinov2_shot_siglip2_text_combo/`
+  - 현재 최고 성능 조합 모델 결과
+
+- `outputs/model_experiments/clip_dinov3_ensemble/`
+  - CLIP+DINOv3 ensemble 결과
+
+- `outputs/model_experiments/dinov3_siglip2_ensemble/`
+  - DINOv3+SigLIP2 ensemble 결과
+
+- `outputs/model_experiments/common_error_analysis/`
+  - 모델 공통 오분류 분석
+  - shot-type 3개 이상 모델 오분류 샘플
+  - confusion pair summary
 
 - `outputs/instagram_overlay/`
-  - 기존 overlay pipeline 결과
+  - overlay pipeline 결과
 
 - `outputs/final_instagram_pipeline/`
   - 최종 pipeline 결과

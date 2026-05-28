@@ -1,0 +1,13 @@
+{
+  "experiment": "focal_loss",
+  "alpha_clip": 0.46,
+  "text_threshold": 0.43,
+  "shot_accuracy": 0.8618181818181818,
+  "shot_macro_f1": 0.8603116709123821,
+  "shot_balanced_accuracy": 0.8889172424221277,
+  "shot_weighted_f1": 0.8618903409451721,
+  "shot_top2_accuracy": 0.9745454545454545,
+  "text_accuracy": 0.8945454545454545,
+  "text_macro_f1": 0.7942519542839452,
+  "joint_accuracy": 0.76
+}

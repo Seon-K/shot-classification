@@ -1,0 +1,14 @@
+{
+  "experiment": "clip_vit_l14_openai_multitask_512_256",
+  "backbone": "clip_vit_l14_openai",
+  "model_name": "ViT-L-14",
+  "pretrained": "openai",
+  "shot_acc": 0.7854545454545454,
+  "shot_macro_f1": 0.7961665416822863,
+  "text_acc": 0.8690909090909091,
+  "text_macro_f1": 0.7954545454545454,
+  "text_f1": 0.9181818181818182,
+  "joint_acc": 0.6872727272727273,
+  "text_threshold": 0.79,
+  "val_text_macro_f1_at_threshold": 0.8204425711275026
+}

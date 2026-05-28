@@ -20,6 +20,8 @@ SPLIT_CSV = ROOT / "outputs" / "baseline" / "dataset_index_with_splits.csv"
 VIDEO_DIR = ROOT / "data" / "videos_new_links"
 CHECKPOINT_PATH = ROOT / "checkpoints" / "clip_vit_b32_multitask_head.pt"
 OUTPUT_ROOT = ROOT / "outputs" / "video_batch_test"
+CLIP_EMBEDDING_PATH = ROOT / "outputs" / "clip_embeddings" / "clip_vit_b32_openai_embeddings.npz"
+CLIP_METADATA_PATH = ROOT / "outputs" / "clip_embeddings" / "clip_embedding_metadata.csv"
 
 # 기본 배치 추론 설정입니다.
 BATCH_OFFSET = 5
@@ -27,7 +29,7 @@ BATCH_LIMIT = 3
 PERCENTILE = 98
 MIN_SCENE_SEC = 0.2
 NUM_FRAME_SAMPLES = 3
-TEXT_THRESHOLD = 0.5
+DEFAULT_TEXT_THRESHOLD = 0.5
 
 # 오버레이 텍스트 위치와 표시 크기 관련 설정입니다.
 OVERLAY_POSITION = "bottom"
@@ -217,22 +219,8 @@ def extract_scene_frames(video_path: Path, scene_df: pd.DataFrame, output_dir: P
     return pd.DataFrame(rows)
 
 
-def guide_text(shot_type, has_text):
-    # 예측된 shot type과 텍스트 여부를 바탕으로 오버레이용 가이드 문구를 만듭니다.
-    base = {
-        "close-up": "피사체의 표정이나 디테일을 강조한 클로즈업 장면입니다.",
-        "medium": "피사체와 주변 맥락을 함께 보여주는 미디엄 샷입니다.",
-        "wide": "넓은 공간과 피사체 배치를 보여주는 와이드 샷입니다.",
-        "object": "특정 제품이나 오브젝트가 중심이 되는 장면입니다.",
-        "space": "공간의 분위기와 환경 정보가 중심이 되는 장면입니다.",
-    }.get(shot_type, "장면 구도를 확인해야 하는 컷입니다.")
-    if has_text:
-        return base + " 화면 내 텍스트 정보도 함께 강조됩니다."
-    return base + " 텍스트보다 시각적 구도가 중심입니다."
-
 
 def guide_text(shot_type, has_text):
-    # 최종 overlay 영상에 표시할 촬영 가이드 문구입니다.
     base_text = {
         "close-up": "피사체의 표정이나 디테일을 강조한 클로즈업 장면입니다.",
         "medium": "피사체와 주변 맥락을 함께 보여주는 미디엄 샷입니다.",
@@ -240,23 +228,9 @@ def guide_text(shot_type, has_text):
         "object": "특정 제품이나 오브젝트가 중심이 되는 장면입니다.",
         "space": "공간의 분위기와 배경 정보가 중심이 되는 장면입니다.",
     }.get(shot_type, "장면 구도를 추가로 확인해야 하는 컷입니다.")
-
     if has_text:
         return base_text + " 화면 속 텍스트 정보도 함께 강조됩니다."
     return base_text + " 텍스트보다 시각적 구도가 중심입니다."
-
-
-def guide_text(shot_type, has_text):
-    base_text = {
-        "close-up": "\ud53c\uc0ac\uccb4\uc758 \ud45c\uc815\uc774\ub098 \ub514\ud14c\uc77c\uc744 \uac15\uc870\ud55c \ud074\ub85c\uc988\uc5c5 \uc7a5\uba74\uc785\ub2c8\ub2e4.",
-        "medium": "\ud53c\uc0ac\uccb4\uc640 \uc8fc\ubcc0 \ub9e5\ub77d\uc744 \ud568\uaed8 \ubcf4\uc5ec\uc8fc\ub294 \ubbf8\ub514\uc5c4 \uc0f7\uc785\ub2c8\ub2e4.",
-        "wide": "\ub113\uc740 \uacf5\uac04\uacfc \ud53c\uc0ac\uccb4 \ubc30\uce58\ub97c \ubcf4\uc5ec\uc8fc\ub294 \uc640\uc774\ub4dc \uc0f7\uc785\ub2c8\ub2e4.",
-        "object": "\ud2b9\uc815 \uc81c\ud488\uc774\ub098 \uc624\ube0c\uc81d\ud2b8\uac00 \uc911\uc2ec\uc774 \ub418\ub294 \uc7a5\uba74\uc785\ub2c8\ub2e4.",
-        "space": "\uacf5\uac04\uc758 \ubd84\uc704\uae30\uc640 \ubc30\uacbd \uc815\ubcf4\uac00 \uc911\uc2ec\uc774 \ub418\ub294 \uc7a5\uba74\uc785\ub2c8\ub2e4.",
-    }.get(shot_type, "\uc7a5\uba74 \uad6c\ub3c4\ub97c \ucd94\uac00\ub85c \ud655\uc778\ud574\uc57c \ud558\ub294 \ucef7\uc785\ub2c8\ub2e4.")
-    if has_text:
-        return base_text + " \ud654\uba74 \uc18d \ud14d\uc2a4\ud2b8 \uc815\ubcf4\ub3c4 \ud568\uaed8 \uac15\uc870\ub429\ub2c8\ub2e4."
-    return base_text + " \ud14d\uc2a4\ud2b8\ubcf4\ub2e4 \uc2dc\uac01\uc801 \uad6c\ub3c4\uac00 \uc911\uc2ec\uc785\ub2c8\ub2e4."
 
 
 def load_korean_font(size=28):
@@ -411,7 +385,8 @@ def predict_scenes(scene_df, clip_model, clip_preprocess, head, idx_to_shot):
 
         pred_shot_idx = int(np.argmax(shot_prob))
         pred_shot = idx_to_shot[pred_shot_idx]
-        has_text = bool(float(text_prob[1]) >= TEXT_THRESHOLD)
+        text_threshold = float(getattr(head, "text_threshold", DEFAULT_TEXT_THRESHOLD))
+        has_text = bool(float(text_prob[1]) >= text_threshold)
 
         row = scene.to_dict()
         row.update(
@@ -420,6 +395,7 @@ def predict_scenes(scene_df, clip_model, clip_preprocess, head, idx_to_shot):
                 "pred_has_text": int(has_text),
                 "shot_confidence": float(shot_prob[pred_shot_idx]),
                 "text_probability": float(text_prob[1]),
+                "text_threshold": text_threshold,
                 "guide_text": guide_text(pred_shot, has_text),
             }
         )
@@ -429,6 +405,50 @@ def predict_scenes(scene_df, clip_model, clip_preprocess, head, idx_to_shot):
         scene_embeddings.append(scene_feature.cpu().numpy()[0])
 
     return pd.DataFrame(prediction_rows), np.vstack(scene_embeddings).astype("float32")
+
+
+def binary_macro_f1(y_true, y_pred):
+    scores = []
+    for label in [0, 1]:
+        true_positive = int(np.sum((y_true == label) & (y_pred == label)))
+        false_positive = int(np.sum((y_true != label) & (y_pred == label)))
+        false_negative = int(np.sum((y_true == label) & (y_pred != label)))
+        precision = true_positive / (true_positive + false_positive) if true_positive + false_positive else 0.0
+        recall = true_positive / (true_positive + false_negative) if true_positive + false_negative else 0.0
+        score = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        scores.append(score)
+    return float(np.mean(scores))
+
+
+def tune_text_threshold_from_validation(head, batch_size=256):
+    # 기존 checkpoint에 threshold가 없을 때 저장된 validation embedding으로 운영 threshold를 보정합니다.
+    if not CLIP_EMBEDDING_PATH.exists() or not CLIP_METADATA_PATH.exists():
+        return DEFAULT_TEXT_THRESHOLD, "default_missing_validation_embeddings"
+
+    metadata = pd.read_csv(CLIP_METADATA_PATH)
+    embeddings = np.load(CLIP_EMBEDDING_PATH)["embeddings"].astype("float32")
+    val_mask = metadata["split"].to_numpy() == "val"
+    if not np.any(val_mask):
+        return DEFAULT_TEXT_THRESHOLD, "default_missing_validation_split"
+
+    val_x = torch.tensor(embeddings[val_mask], dtype=torch.float32)
+    val_y = metadata.loc[val_mask, "has_text"].to_numpy(dtype=np.int64)
+    probabilities = []
+    with torch.no_grad():
+        for start in range(0, len(val_x), batch_size):
+            _, text_logits = head(val_x[start : start + batch_size].to(DEVICE))
+            probabilities.append(torch.softmax(text_logits, dim=1).cpu().numpy()[:, 1])
+    text_prob = np.concatenate(probabilities)
+
+    best_threshold = DEFAULT_TEXT_THRESHOLD
+    best_score = -1.0
+    for threshold in np.round(np.arange(0.05, 0.951, 0.01), 2):
+        pred = (text_prob >= float(threshold)).astype(np.int64)
+        score = binary_macro_f1(val_y, pred)
+        if score > best_score or (score == best_score and abs(threshold - DEFAULT_TEXT_THRESHOLD) < abs(best_threshold - DEFAULT_TEXT_THRESHOLD)):
+            best_threshold = float(threshold)
+            best_score = score
+    return best_threshold, "validation_text_macro_f1"
 
 
 def load_models():
@@ -456,6 +476,13 @@ def load_models():
         dropout=checkpoint.get("dropout", 0.20),
     ).to(DEVICE)
     head.load_state_dict(checkpoint["model_state_dict"])
+    if "text_threshold" in checkpoint:
+        text_threshold = float(checkpoint["text_threshold"])
+        threshold_source = checkpoint.get("text_threshold_metric", "checkpoint")
+    else:
+        text_threshold, threshold_source = tune_text_threshold_from_validation(head)
+    head.text_threshold = text_threshold
+    head.text_threshold_source = threshold_source
     head.eval()
     return clip_model, clip_preprocess, head, idx_to_shot
 

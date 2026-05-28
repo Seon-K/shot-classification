@@ -1,0 +1,11 @@
+﻿joint_label,close-up_notext,close-up_text,medium_notext,medium_text,object_notext,object_text,space_notext,space_text,wide_notext,wide_text
+close-up_notext,2,5,0,0,0,0,0,0,0,0
+close-up_text,4,29,4,22,0,8,1,0,0,0
+medium_notext,0,0,11,4,0,0,3,0,0,0
+medium_text,0,6,15,43,0,2,0,0,0,5
+object_notext,0,0,0,0,0,4,1,1,0,0
+object_text,0,0,0,0,1,46,0,2,0,1
+space_notext,0,0,0,0,0,0,4,0,0,0
+space_text,0,0,0,0,0,0,2,14,2,1
+wide_notext,0,0,1,0,0,0,0,0,2,0
+wide_text,0,0,0,7,0,0,0,0,7,15

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # 인스타그램 링크를 받아 영상 다운로드부터 오버레이 생성까지 실행하는 메인 파이프라인입니다.
+import argparse
 import json
 from pathlib import Path
 from urllib.parse import urlparse
@@ -81,12 +82,10 @@ def sample_frame_indices_for_detection(video_path: Path, interval_sec=0.25):
     return indices, info
 
 
-def read_frame_rgb(video_path: Path, frame_idx: int):
-    # OpenCV로 특정 프레임을 읽고 CLIP 입력에 맞게 RGB로 변환합니다.
-    cap = cv2.VideoCapture(str(video_path))
+def read_frame_rgb(cap: cv2.VideoCapture, frame_idx: int):
+    # 이미 열린 VideoCapture에서 특정 프레임을 읽고 CLIP 입력에 맞게 RGB로 변환합니다.
     cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_idx))
     ret, frame = cap.read()
-    cap.release()
     if not ret:
         return None
     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -94,15 +93,25 @@ def read_frame_rgb(video_path: Path, frame_idx: int):
 
 def encode_detection_frames(video_path: Path, frame_indices, clip_model, clip_preprocess):
     # 전환 감지용 프레임들을 CLIP 이미지 임베딩으로 변환합니다.
+    # VideoCapture를 한 번만 열어 프레임마다 파일을 다시 여는 병목을 피합니다.
     valid_indices = []
     tensors = []
-    for frame_idx in tqdm(frame_indices, leave=False, desc=f"encode {video_path.stem}"):
-        frame_rgb = read_frame_rgb(video_path, frame_idx)
-        if frame_rgb is None:
-            continue
-        image = Image.fromarray(frame_rgb)
-        tensors.append(clip_preprocess(image))
-        valid_indices.append(frame_idx)
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise ValueError(f"Cannot open video: {video_path}")
+    try:
+        for frame_idx in tqdm(frame_indices, leave=False, desc=f"encode {video_path.stem}"):
+            frame_rgb = read_frame_rgb(cap, frame_idx)
+            if frame_rgb is None:
+                continue
+            image = Image.fromarray(frame_rgb)
+            tensors.append(clip_preprocess(image))
+            valid_indices.append(frame_idx)
+    finally:
+        cap.release()
+
+    if not tensors:
+        return np.array([], dtype=np.int64), np.empty((0, 0), dtype="float32")
 
     features = []
     with torch.no_grad():
@@ -171,6 +180,11 @@ def detect_scenes_clip_distance(video_path: Path, clip_model, clip_preprocess):
     # CLIP 인접 임베딩 거리 방식으로 영상의 scene 구간을 감지합니다.
     frame_indices, info = sample_frame_indices_for_detection(video_path, SAMPLE_INTERVAL_SEC)
     valid_indices, embeddings = encode_detection_frames(video_path, frame_indices, clip_model, clip_preprocess)
+    if len(valid_indices) < 2:
+        scene_df = build_scene_table(video_path, [], float("nan"), info)
+        distance_df = pd.DataFrame(columns=["frame_idx", "time_sec", "clip_distance"])
+        return scene_df, distance_df, float("nan"), info
+
     distances = 1.0 - np.sum(embeddings[1:] * embeddings[:-1], axis=1)
     cut_peaks, threshold = find_distance_peaks(distances, valid_indices, info["fps"])
     scene_df = build_scene_table(video_path, cut_peaks, threshold, info)
@@ -182,6 +196,109 @@ def detect_scenes_clip_distance(video_path: Path, clip_model, clip_preprocess):
         }
     )
     return scene_df, distance_df, threshold, info
+
+
+def evaluate_cut_frames(predicted_frames, true_frames, fps, tolerance_sec=0.30):
+    # 예측 컷과 정답 컷을 tolerance 안에서 1:1 매칭해 precision/recall/F1을 계산합니다.
+    tolerance_frames = max(1, int(round(float(fps) * tolerance_sec)))
+    predicted = sorted(int(x) for x in predicted_frames if int(x) > 0)
+    true = sorted(int(x) for x in true_frames if int(x) > 0)
+    matched_true = set()
+    matches = []
+
+    for pred in predicted:
+        candidates = [
+            (abs(pred - gt), idx, gt)
+            for idx, gt in enumerate(true)
+            if idx not in matched_true and abs(pred - gt) <= tolerance_frames
+        ]
+        if not candidates:
+            continue
+        _, true_idx, gt = min(candidates)
+        matched_true.add(true_idx)
+        matches.append({"predicted_frame": pred, "true_frame": gt, "frame_error": pred - gt})
+
+    tp = len(matches)
+    fp = len(predicted) - tp
+    fn = len(true) - tp
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    return {
+        "true_cut_count": len(true),
+        "predicted_cut_count": len(predicted),
+        "true_positive": tp,
+        "false_positive": fp,
+        "false_negative": fn,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "tolerance_sec": float(tolerance_sec),
+        "tolerance_frames": tolerance_frames,
+        "matches": matches,
+    }
+
+
+def load_labeled_cut_frames(label_csv: Path, video_path: Path, fps: float):
+    # cut_frame/frame_idx/start_frame 또는 cut_time_sec/time_sec/start_time 컬럼을 지원합니다.
+    labels = pd.read_csv(label_csv)
+    if "video_name" in labels.columns:
+        labels = labels[labels["video_name"].astype(str) == video_path.name]
+    elif "video_id" in labels.columns:
+        labels = labels[labels["video_id"].astype(str) == video_path.stem]
+
+    if "is_cut" in labels.columns:
+        labels = labels[labels["is_cut"].astype(bool)]
+
+    for col in ["cut_frame", "frame_idx", "start_frame"]:
+        if col in labels.columns:
+            return labels[col].dropna().astype(int).tolist()
+
+    for col in ["cut_time_sec", "time_sec", "start_time"]:
+        if col in labels.columns:
+            return [int(round(float(value) * fps)) for value in labels[col].dropna().tolist()]
+
+    raise ValueError(
+        "label CSV must include one of cut_frame/frame_idx/start_frame "
+        "or cut_time_sec/time_sec/start_time"
+    )
+
+
+def evaluate_scene_detection_file(
+    video_path: Path,
+    label_csv: Path,
+    clip_model,
+    clip_preprocess,
+    output_path: Path | None = None,
+    tolerance_sec=0.30,
+):
+    scene_df, distance_df, threshold, info = detect_scenes_clip_distance(video_path, clip_model, clip_preprocess)
+    predicted_frames = scene_df.loc[scene_df["start_frame"] > 0, "start_frame"].tolist()
+    true_frames = load_labeled_cut_frames(label_csv, video_path, info["fps"])
+    metrics = evaluate_cut_frames(predicted_frames, true_frames, info["fps"], tolerance_sec=tolerance_sec)
+    metrics.update(
+        {
+            "video_path": str(video_path.resolve()),
+            "label_csv": str(label_csv.resolve()),
+            "threshold": float(threshold),
+            "duration_sec": float(info["duration_sec"]),
+        }
+    )
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        summary = {k: v for k, v in metrics.items() if k != "matches"}
+        pd.DataFrame([summary]).to_csv(output_path, index=False, encoding="utf-8-sig")
+        if metrics["matches"]:
+            pd.DataFrame(metrics["matches"]).to_csv(
+                output_path.with_name(output_path.stem + "_matches.csv"),
+                index=False,
+                encoding="utf-8-sig",
+            )
+        scene_df.to_csv(output_path.with_name(output_path.stem + "_predicted_scenes.csv"), index=False, encoding="utf-8-sig")
+        distance_df.to_csv(output_path.with_name(output_path.stem + "_distance_profile.csv"), index=False, encoding="utf-8-sig")
+
+    return metrics
 
 
 def process_url(url: str, index: int, clip_model, clip_preprocess, head, idx_to_shot):
@@ -218,10 +335,34 @@ def process_url(url: str, index: int, clip_model, clip_preprocess, head, idx_to_
     }
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Instagram overlay pipeline and scene detection evaluation")
+    parser.add_argument("--video", type=Path, help="local video path for scene detection evaluation")
+    parser.add_argument("--evaluate-cuts", type=Path, help="CSV with human-labeled cut frames or times")
+    parser.add_argument("--tolerance-sec", type=float, default=0.30, help="boundary matching tolerance in seconds")
+    parser.add_argument("--eval-output", type=Path, default=OUTPUT_ROOT / "scene_detection_eval.csv")
+    return parser.parse_args()
+
+
 def main():
-    # 전체 링크 목록을 순회하며 결과 요약 CSV까지 저장합니다.
+    args = parse_args()
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     clip_model, clip_preprocess, head, idx_to_shot = base.load_models()
+
+    if args.evaluate_cuts is not None:
+        if args.video is None:
+            raise ValueError("--video is required when --evaluate-cuts is provided")
+        metrics = evaluate_scene_detection_file(
+            args.video,
+            args.evaluate_cuts,
+            clip_model,
+            clip_preprocess,
+            output_path=args.eval_output,
+            tolerance_sec=args.tolerance_sec,
+        )
+        print(json.dumps({k: v for k, v in metrics.items() if k != "matches"}, indent=2, ensure_ascii=False))
+        print("saved:", args.eval_output)
+        return
 
     summary_rows = []
     for index, url in enumerate(INSTAGRAM_LINKS, start=1):
