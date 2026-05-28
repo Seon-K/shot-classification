@@ -1,0 +1,7 @@
+{
+  "total_labeled_cuts_used": 2012,
+  "number_of_videos": 217,
+  "train_count": 1453,
+  "val_count": 284,
+  "test_count": 275
+}

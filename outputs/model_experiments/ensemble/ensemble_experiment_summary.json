@@ -1,0 +1,26 @@
+{
+  "best_alpha_clip": 0.45,
+  "rows": [
+    {
+      "experiment": "clip_stronger_retrained",
+      "shot_acc": 0.8072727272727273,
+      "shot_macro_f1": 0.8080895792660499,
+      "text_acc": 0.8945454545454545,
+      "text_f1": 0.9376344086021505,
+      "joint_acc": 0.7272727272727273
+    },
+    {
+      "experiment": "dinov2_shot_retrained",
+      "shot_acc": 0.8,
+      "shot_macro_f1": 0.7960301768816542
+    },
+    {
+      "experiment": "ensemble_alpha_clip_0.45",
+      "shot_acc": 0.8363636363636363,
+      "shot_macro_f1": 0.8386207165706457,
+      "text_acc": 0.8945454545454545,
+      "text_f1": 0.9376344086021505,
+      "joint_acc": 0.730909090909091
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+﻿joint_accuracy,joint_micro_f1,joint_macro_f1,joint_weighted_f1,guide_reliability_score,conditional_text_given_shot,conditional_shot_given_text
+0.7272727272727273,0.7272727272727273,0.6509661360042834,0.7289841996020086,0.7272727272727273,0.9009009009009009,0.8130081300813008

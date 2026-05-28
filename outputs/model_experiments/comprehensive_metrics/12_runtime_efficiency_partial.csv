@@ -1,0 +1,3 @@
+﻿metric,value,note
+classifier_inference_time_on_test_embeddings_sec,0.019044999993639067,"final head inference only, excludes CLIP embedding extraction and overlay rendering"
+classifier_throughput_samples_per_sec,14439.485434069236,test samples / classifier inference time

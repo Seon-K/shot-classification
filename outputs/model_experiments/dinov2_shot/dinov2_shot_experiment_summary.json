@@ -1,0 +1,22 @@
+[
+  {
+    "experiment": "dinov2_shot_512_256",
+    "shot_acc": 0.8,
+    "shot_macro_f1": 0.7960301768816542
+  },
+  {
+    "experiment": "dinov2_shot_512_256_closeup_1_5",
+    "shot_acc": 0.7818181818181819,
+    "shot_macro_f1": 0.7802786312156558
+  },
+  {
+    "experiment": "dinov2_shot_768_384",
+    "shot_acc": 0.7890909090909091,
+    "shot_macro_f1": 0.7846872468391611
+  },
+  {
+    "experiment": "dinov2_shot_linear",
+    "shot_acc": 0.7090909090909091,
+    "shot_macro_f1": 0.7237005984669536
+  }
+]

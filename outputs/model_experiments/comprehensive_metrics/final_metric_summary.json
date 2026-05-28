@@ -1,0 +1,14 @@
+{
+  "shot_accuracy": 0.8072727272727273,
+  "shot_macro_f1": 0.8080895792660499,
+  "shot_balanced_accuracy": 0.8285711901272478,
+  "shot_weighted_f1": 0.8058191541079242,
+  "shot_top2_accuracy": 0.9709090909090909,
+  "text_accuracy": 0.8945454545454545,
+  "text_macro_f1": 0.7982289690069576,
+  "text_weighted_f1": 0.8991078143867518,
+  "joint_accuracy": 0.7272727272727273,
+  "joint_macro_f1": 0.6509661360042834,
+  "joint_weighted_f1": 0.7289841996020086,
+  "joint_micro_f1": 0.7272727272727273
+}

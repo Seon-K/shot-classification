@@ -1,0 +1,3 @@
+﻿source_root,video_id,scene_count,opening_shot_type,ending_shot_type,dominant_shot_type,avg_scene_duration,fast_cut_ratio_duration_lt_1s,text_cut_ratio,repeated_shot_ratio,transition_count,text_density_level,cut_speed_category
+instagram_overlay,new_001_DYRs6scPeVC,25,close-up,object,medium,3.0893333333333333,0.04,0.92,0.41666666666666663,14,high,slow
+final_instagram_pipeline,new_001_DYRs6scPeVC,25,close-up,object,medium,3.0893333333333333,0.04,0.96,0.6666666666666667,8,high,slow

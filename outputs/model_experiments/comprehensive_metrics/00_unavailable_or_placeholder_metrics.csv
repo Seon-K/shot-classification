@@ -1,0 +1,8 @@
+﻿section,metric,reason
+11_scene_detection_metrics,mismatch_ratio,manual scene boundary ground truth is not available
+11_scene_detection_metrics,avg_absolute_count_difference,manual scene count ground truth is not available
+11_scene_detection_metrics,over_detected_count/under_detected_count,manual scene count ground truth is not available
+12_runtime_efficiency,embedding_extraction_time/overlay_rendering_time/total_runtime,runtime logging was not captured during pipeline execution
+14_data_size_experiment,performance_vs_train_size,subsample training experiments were not run
+16_annotation_label_quality,raw_agreement/Cohen_Kappa,second annotator labels are not available
+17_human_evaluation,overlay_usefulness/guide_helpfulness,human survey results are not available

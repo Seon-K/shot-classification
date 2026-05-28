@@ -1,0 +1,5 @@
+﻿error_type,ratio,count
+both_correct,0.7272727272727273,200
+shot_only_error,0.16727272727272727,46
+text_only_error,0.08,22
+both_wrong,0.025454545454545455,7

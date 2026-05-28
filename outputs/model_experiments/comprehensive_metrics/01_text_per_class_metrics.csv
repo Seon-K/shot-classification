@@ -1,0 +1,3 @@
+﻿class,precision,recall_per_class_accuracy,f1,support,false_positive_count,false_negative_count,avg_prediction_confidence_for_predicted_class
+notext,0.5957446808510638,0.7368421052631579,0.6588235294117647,38,19,10,0.8351562023162842
+text,0.956140350877193,0.919831223628692,0.9376344086021505,237,10,19,0.9491782188415527

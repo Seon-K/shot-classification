@@ -1,0 +1,6 @@
+﻿Shot Type,Precision,Recall / Class Acc,F1-score,Support
+close-up,0.883,0.707,0.785,75
+medium,0.793,0.775,0.784,89
+object,0.825,0.929,0.874,56
+space,0.76,0.826,0.792,23
+wide,0.725,0.906,0.806,32

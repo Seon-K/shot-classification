@@ -1,0 +1,5 @@
+﻿metric,value,note
+end_to_end_reliability,0.7272727272727273,same as joint accuracy
+confidence_filtered_reliability_at_0_7,0.8082901554404145,joint accuracy where joint confidence >= 0.7
+guide_reliability,0.7272727272727273,guide is considered reliable when both shot and text are correct
+error_propagation_gap_shot_acc_minus_joint_acc,0.07999999999999996,drop from shot-only correctness to end-to-end correctness

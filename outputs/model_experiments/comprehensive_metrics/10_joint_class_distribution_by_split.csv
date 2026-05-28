@@ -1,0 +1,11 @@
+﻿joint_label,test,train,val
+close-up_notext,7,72,11
+close-up_text,68,406,72
+medium_notext,18,93,11
+medium_text,71,364,80
+object_notext,6,37,3
+object_text,50,223,41
+space_notext,4,21,7
+space_text,19,68,14
+wide_notext,3,61,18
+wide_text,29,108,27

@@ -1,0 +1,5 @@
+﻿Metric,Value,Description
+Joint Accuracy,0.727,shot_type과 has_text가 동시에 맞은 비율
+Joint Micro F1-score,0.727,전체 joint sample 기준 F1
+Joint Macro F1-score,0.651,10개 joint class F1의 단순 평균
+Joint Weighted F1-score,0.729,class support를 반영한 joint F1

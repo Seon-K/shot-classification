@@ -1,7 +1,15 @@
-labeled_dataset/
-new_001_DYeE275CvjB/
-outputs_instagram_overlay/
 __pycache__/
 *.pyc
-videos_new_links/
-outputs_instagram_overlay/ㅇ
+
+# Local data and downloaded media
+data/labeled_dataset/
+data/videos_new_links/
+data/outputs_clip_frame_extraction/
+
+# Generated video outputs
+outputs/instagram_overlay/
+outputs/final_instagram_pipeline/
+outputs/video_batch_test/
+
+# Temporary/local one-off folders
+new_001_DYeE275CvjB/

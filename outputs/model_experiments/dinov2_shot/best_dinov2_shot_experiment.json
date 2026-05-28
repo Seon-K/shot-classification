@@ -1,0 +1,5 @@
+{
+  "experiment": "dinov2_shot_512_256",
+  "shot_acc": 0.8,
+  "shot_macro_f1": 0.7960301768816542
+}
